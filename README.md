@@ -1,5 +1,5 @@
 # Awesome Elixir
-### List of awesome Elixir and Erlang libraries
+List of awesome Elixir and Erlang libraries
 
 ## Requirements
 - Latest elixir and erlang/OTP installed
@@ -25,6 +25,12 @@ $ cd assets; npm i; cd -
 ```Bash
 $ mix phx.server
 ```
+Check
+```Bash
+$ curl -i http://localhost:4000/?min_stars=1&search=some
+# or
+$ xdg-open http://localhost:4000/\?search\=some\&min_stars\=1
+```
 Before second run you should kill rollup watcher
 ```Bash
 $ pkill node
@@ -33,5 +39,5 @@ $ pkill node
 ## Github api rate limits
 You can pass your login and password on env vars, to bypass the limit of 60 requests per hour
 ```Bash
-$ GITHUB_LOGIN=pass GITHUB_PASS=pass
+$ GITHUB_LOGIN=login GITHUB_PASS=pass
 ```
