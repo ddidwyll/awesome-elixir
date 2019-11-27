@@ -16,12 +16,12 @@
         href="/?search=<%= @search %>&min_stars=0"
       >≥0☆</a>
       <a
-        <%= if @stars == "1" do %>disabled<% end %>
+        <%= if @stars == "10" do %>disabled<% end %>
         class="button button-outline"
         href="/?search=<%= @search %>&min_stars=10"
       >≥10☆</a>
       <a
-        <%= if @stars == "10" do %>disabled<% end %>
+        <%= if @stars == "50" do %>disabled<% end %>
         class="button button-outline"
         href="/?search=<%= @search %>&min_stars=50"
       >≥50☆</a>
