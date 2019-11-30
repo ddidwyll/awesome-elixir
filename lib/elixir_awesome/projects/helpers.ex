@@ -17,7 +17,7 @@ defmodule ElixirAwesome.Projects.Helpers do
     3 => "Mar",
     4 => "Apr",
     5 => "May",
-    6 => "June",
+    6 => "Jun",
     7 => "Jul",
     8 => "Aug",
     9 => "Sep",
