@@ -13,9 +13,8 @@ defmodule ElixirAwesome.Projects.Meta do
   end
 
   defp github_api(repo, header) do
-    import :os, only: [system_time: 1]
-    import ElixirAwesome.Projects.Helpers
-    import Integer, only: [parse: 1]
+    alias ElixirAwesome.Projects.Helpers
+    import Helpers, only: [set_headers: 1]
     import HTTPoison, only: [get: 3]
     alias HTTPoison.Response, as: R
     alias HTTPoison.Error, as: E
@@ -35,20 +34,7 @@ defmodule ElixirAwesome.Projects.Meta do
         {:ok, body}
 
       {:ok, %R{status_code: 403, headers: headers}} ->
-        with true <-
-               get_header(headers, "X-RateLimit-Remaining") == "0",
-             reset <- get_header(headers, "X-RateLimit-Reset"),
-             true <- is_binary(reset),
-             {unix, _} <- parse(reset),
-             now <- system_time(:second) do
-          if unix > now do
-            {:sleep, unix - now}
-          else
-            {:sleep, 3600}
-          end
-        else
-          _ -> {:skip, "Forbidden"}
-        end
+        is_sleep(headers)
 
       {:ok, %R{status_code: 404}} ->
         {:delete, "Project not found"}
@@ -58,6 +44,27 @@ defmodule ElixirAwesome.Projects.Meta do
 
       _ ->
         {:shedule, "Something went wrong"}
+    end
+  end
+
+  defp is_sleep(headers) do
+    alias ElixirAwesome.Projects.Helpers
+    import Helpers, only: [get_header: 2]
+    import Integer, only: [parse: 1]
+    import :os, only: [system_time: 1]
+
+    with limit <- get_header(headers, "X-RateLimit-Remaining"),
+         true <- limit == "0",
+         reset <- get_header(headers, "X-RateLimit-Reset"),
+         {unix, _} <- parse(reset || "") do
+      now = system_time(:second)
+      if unix > now do
+        {:sleep, unix - now}
+      else
+        {:sleep, 3600}
+      end
+    else
+      _ -> {:skip, "Forbidden"}
     end
   end
 
