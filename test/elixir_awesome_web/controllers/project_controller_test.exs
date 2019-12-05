@@ -1,142 +1,76 @@
 defmodule ElixirAwesomeWeb.ProjectControllerTest do
-  use ElixirAwesomeWeb.ConnCase
+  use ExUnit.Case
+  use ElixirAwesomeStubs
+  use Phoenix.ConnTest
 
-  alias ElixirAwesome.Projects
+  alias ElixirAwesomeWeb.Router.Helpers, as: Routes
+  alias ElixirAwesome.Repo
 
-  @create_attrs %{
-    category: "some category",
-    description: "some description",
-    exist: true,
-    last_commit: ~N[2010-04-17 14:00:00],
-    name: "some name",
-    stars_count: 42,
-    url: "some url"
-  }
-  @update_attrs %{
-    category: "some updated category",
-    description: "some updated description",
-    exist: false,
-    last_commit: ~N[2011-05-18 15:01:01],
-    name: "some updated name",
-    stars_count: 43,
-    url: "some updated url"
-  }
-  @invalid_attrs %{
-    category: nil,
-    description: nil,
-    exist: nil,
-    last_commit: nil,
-    name: nil,
-    stars_count: nil,
-    url: nil
-  }
+  @endpoint ElixirAwesomeWeb.Endpoint
 
-  def fixture(:project) do
-    {:ok, project} = Projects.create_project(@create_attrs)
-    project
+  import Phoenix.ConnTest
+  import ElixirAwesome.Projects
+  import Ecto.Adapters.SQL.Sandbox, only: [checkout: 1, mode: 2]
+
+  setup do
+    checkout(Repo)
+    mode(Repo, {:shared, self()})
+
+    query()
+    |> upsert_categories([@cat_from_source])
+    |> upsert_projects([@project_with_meta])
+    |> run()
+
+    {:ok, conn: build_conn()}
   end
 
-  describe "index" do
-    test "lists all projects", %{conn: conn} do
-      conn = get(conn, Routes.project_path(conn, :index))
-      assert html_response(conn, 200) =~ "Listing Projects"
-    end
+  test "all data", %{conn: conn} do
+    html =
+      get(conn, Routes.project_path(conn, :index))
+      |> html_response(200)
+
+    assert html =~ @field_cat_description
+    assert html =~ @field_cat_name
+    assert html =~ @field_project_description
   end
+  
+  test "min stars -1, ever mathed", %{conn: conn} do
+    html =
+      get(conn, Routes.project_path(conn, :index, %{"min_stars" => "-1"}))
+      |> html_response(200)
 
-  describe "new project" do
-    test "renders form", %{conn: conn} do
-      conn = get(conn, Routes.project_path(conn, :new))
-      assert html_response(conn, 200) =~ "New Project"
-    end
+    assert html =~ @field_cat_name
+    assert html =~ @field_cat_description
+    assert html =~ @field_project_description
   end
+  
+  test "min stars 2147483647, never mathed", %{conn: conn} do
+    html =
+      get(conn, Routes.project_path(conn, :index, %{"min_stars" => "2147483647"}))
+      |> html_response(200)
 
-  describe "create project" do
-    test "redirects to show when data is valid", %{conn: conn} do
-      conn =
-        post(conn, Routes.project_path(conn, :create),
-          project: @create_attrs
-        )
-
-      assert %{id: id} = redirected_params(conn)
-
-      assert redirected_to(conn) ==
-               Routes.project_path(conn, :show, id)
-
-      conn = get(conn, Routes.project_path(conn, :show, id))
-      assert html_response(conn, 200) =~ "Show Project"
-    end
-
-    test "renders errors when data is invalid", %{conn: conn} do
-      conn =
-        post(conn, Routes.project_path(conn, :create),
-          project: @invalid_attrs
-        )
-
-      assert html_response(conn, 200) =~ "New Project"
-    end
+    assert html =~ @field_cat_name
+    refute html =~ @field_cat_description
+    refute html =~ @field_project_description
   end
+  
+  test "search \"neverMat4InG#$%^_mathing\", not mathed", %{conn: conn} do
+    html =
+      get(conn, Routes.project_path(conn, :index, %{"search" => "neverMat4InG#$%^_mathing"}))
+      |> html_response(200)
 
-  describe "edit project" do
-    setup [:create_project]
-
-    test "renders form for editing chosen project", %{
-      conn: conn,
-      project: project
-    } do
-      conn = get(conn, Routes.project_path(conn, :edit, project))
-      assert html_response(conn, 200) =~ "Edit Project"
-    end
+    assert html =~ @field_cat_name
+    refute html =~ @field_cat_description
+    refute html =~ @field_project_description
   end
+  
+  test "search ever_mathed, mathed", %{conn: conn} do
+    html =
+      get(conn, Routes.project_path(conn, :index, %{"search" => @field_project_name}))
+      |> html_response(200)
 
-  describe "update project" do
-    setup [:create_project]
-
-    test "redirects when data is valid", %{
-      conn: conn,
-      project: project
-    } do
-      conn =
-        put(conn, Routes.project_path(conn, :update, project),
-          project: @update_attrs
-        )
-
-      assert redirected_to(conn) ==
-               Routes.project_path(conn, :show, project)
-
-      conn = get(conn, Routes.project_path(conn, :show, project))
-      assert html_response(conn, 200) =~ "some updated category"
-    end
-
-    test "renders errors when data is invalid", %{
-      conn: conn,
-      project: project
-    } do
-      conn =
-        put(conn, Routes.project_path(conn, :update, project),
-          project: @invalid_attrs
-        )
-
-      assert html_response(conn, 200) =~ "Edit Project"
-    end
-  end
-
-  describe "delete project" do
-    setup [:create_project]
-
-    test "deletes chosen project", %{conn: conn, project: project} do
-      conn =
-        delete(conn, Routes.project_path(conn, :delete, project))
-
-      assert redirected_to(conn) == Routes.project_path(conn, :index)
-
-      assert_error_sent 404, fn ->
-        get(conn, Routes.project_path(conn, :show, project))
-      end
-    end
-  end
-
-  defp create_project(_) do
-    project = fixture(:project)
-    {:ok, project: project}
+    assert html =~ @field_cat_name
+    assert html =~ @field_cat_description
+    assert html =~ @field_project_description
   end
 end

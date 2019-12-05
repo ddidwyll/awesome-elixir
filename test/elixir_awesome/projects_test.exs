@@ -1,195 +1,95 @@
 defmodule ElixirAwesome.ProjectsTest do
-  use ElixirAwesome.DataCase
+  use ExUnit.Case
+  use ElixirAwesomeStubs
 
-  alias ElixirAwesome.Projects
+  import ElixirAwesome.Projects
 
-  describe "projects" do
-    alias ElixirAwesome.Projects.Project
+  setup do
+    import Ecto.Adapters.SQL.Sandbox, only: [checkout: 1]
 
-    @valid_attrs %{
-      category: "some category",
-      description: "some description",
-      exist: true,
-      last_commit: ~N[2010-04-17 14:00:00],
-      name: "some name",
-      stars_count: 42,
-      url: "some url"
-    }
-    @update_attrs %{
-      category: "some updated category",
-      description: "some updated description",
-      exist: false,
-      last_commit: ~N[2011-05-18 15:01:01],
-      name: "some updated name",
-      stars_count: 43,
-      url: "some updated url"
-    }
-    @invalid_attrs %{
-      category: nil,
-      description: nil,
-      exist: nil,
-      last_commit: nil,
-      name: nil,
-      stars_count: nil,
-      url: nil
-    }
+    checkout(ElixirAwesome.Repo)
+  end
 
-    def project_fixture(attrs \\ %{}) do
-      {:ok, project} =
-        attrs
-        |> Enum.into(@valid_attrs)
-        |> Projects.create_project()
-
-      project
-    end
-
-    test "list_projects/0 returns all projects" do
-      project = project_fixture()
-      assert Projects.list_projects() == [project]
-    end
-
-    test "get_project!/1 returns the project with given id" do
-      project = project_fixture()
-      assert Projects.get_project!(project.id) == project
-    end
-
-    test "create_project/1 with valid data creates a project" do
-      assert {:ok, %Project{} = project} =
-               Projects.create_project(@valid_attrs)
-
-      assert project.category == "some category"
-      assert project.description == "some description"
-      assert project.exist == true
-      assert project.last_commit == ~N[2010-04-17 14:00:00]
-      assert project.name == "some name"
-      assert project.stars_count == 42
-      assert project.url == "some url"
-    end
-
-    test "create_project/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} =
-               Projects.create_project(@invalid_attrs)
-    end
-
-    test "update_project/2 with valid data updates the project" do
-      project = project_fixture()
-
-      assert {:ok, %Project{} = project} =
-               Projects.update_project(project, @update_attrs)
-
-      assert project.category == "some updated category"
-      assert project.description == "some updated description"
-      assert project.exist == false
-      assert project.last_commit == ~N[2011-05-18 15:01:01]
-      assert project.name == "some updated name"
-      assert project.stars_count == 43
-      assert project.url == "some updated url"
-    end
-
-    test "update_project/2 with invalid data returns error changeset" do
-      project = project_fixture()
-
-      assert {:error, %Ecto.Changeset{}} =
-               Projects.update_project(project, @invalid_attrs)
-
-      assert project == Projects.get_project!(project.id)
-    end
-
-    test "delete_project/1 deletes the project" do
-      project = project_fixture()
-      assert {:ok, %Project{}} = Projects.delete_project(project)
-
-      assert_raise Ecto.NoResultsError, fn ->
-        Projects.get_project!(project.id)
-      end
-    end
-
-    test "change_project/1 returns a project changeset" do
-      project = project_fixture()
-      assert %Ecto.Changeset{} = Projects.change_project(project)
+  test "insert valid project with non-existent category_name" do
+    assert_raise Postgrex.Error, ~r/^ERROR 23503/, fn ->
+      query() |> upsert_projects([@project_from_source]) |> run()
     end
   end
 
-  describe "categories" do
-    alias ElixirAwesome.Projects.Category
+  test "full data life cycle" do
+    assert {:ok, %{ups_c: {1, nil}, ups_p: {1, [returned_project]}}} =
+             query()
+             |> upsert_categories([@cat_from_source])
+             |> upsert_projects([@project_from_source])
+             |> run()
 
-    @valid_attrs %{
-      description: "some description",
-      exist: true,
-      name: "some name"
-    }
-    @update_attrs %{
-      description: "some updated description",
-      exist: false,
-      name: "some updated name"
-    }
-    @invalid_attrs %{description: nil, exist: nil, name: nil}
+    assert @project_without_meta = to_map(returned_project)
 
-    def category_fixture(attrs \\ %{}) do
-      {:ok, category} =
-        attrs
-        |> Enum.into(@valid_attrs)
-        |> Projects.create_category()
+    # retrieve saved data
+    assert [category] = cats_with_projects(nil, nil)
 
-      category
-    end
+    # check saved category
+    assert @field_cat_name = category.name
+    assert @field_cat_description = category.description
+    assert true = category.exist
 
-    test "list_categories/0 returns all categories" do
-      category = category_fixture()
-      assert Projects.list_categories() == [category]
-    end
+    # check saved project
+    assert [project] = category.projects
+    assert @project_without_meta = to_map(project)
 
-    test "get_category!/1 returns the category with given id" do
-      category = category_fixture()
-      assert Projects.get_category!(category.id) == category
-    end
+    # invalidate all data
+    assert {:ok, %{inv_c: {1, nil}, inv_p: {1, nil}}} =
+             query() |> invalidate_all() |> run()
 
-    test "create_category/1 with valid data creates a category" do
-      assert {:ok, %Category{} = category} =
-               Projects.create_category(@valid_attrs)
+    # check that all data invalidated
+    assert [] = cats_with_projects(nil, nil)
 
-      assert category.description == "some description"
-      assert category.exist == true
-      assert category.name == "some name"
-    end
+    # update category
+    assert {:ok, %{ups_c: {1, nil}}} =
+             query()
+             |> upsert_categories([%{@cat_from_source | exist: true}])
+             |> run()
 
-    test "create_category/1 with invalid data returns error changeset" do
-      assert {:error, %Ecto.Changeset{}} =
-               Projects.create_category(@invalid_attrs)
-    end
+    # retrieve updated category
+    assert [category_updated] = cats_with_projects(nil, nil)
+    assert @cat_from_source = to_map(category_updated)
 
-    test "update_category/2 with valid data updates the category" do
-      category = category_fixture()
+    # update project (only last_commit and exist)
+    assert {:ok, %{ups_p: {1, [project_updated]}}} =
+             query()
+             |> upsert_projects([@project_with_meta], [
+               :last_commit,
+               :exist
+             ])
+             |> run()
 
-      assert {:ok, %Category{} = category} =
-               Projects.update_category(category, @update_attrs)
+    assert @field_project_last_commit = project_updated.last_commit
+    assert true = project_updated.exist
 
-      assert category.description == "some updated description"
-      assert category.exist == false
-      assert category.name == "some updated name"
-    end
+    # update project with new stars_count
+    assert {:ok, %{ups_p: {1, [project_with_meta]}}} =
+             query()
+             |> upsert_projects([@project_with_meta])
+             |> run()
 
-    test "update_category/2 with invalid data returns error changeset" do
-      category = category_fixture()
+    assert @project_with_meta = to_map(project_with_meta)
 
-      assert {:error, %Ecto.Changeset{}} =
-               Projects.update_category(category, @invalid_attrs)
+    # check min stars constraint
+    assert [%{projects: [%{name: "Project"}]}] =
+             cats_with_projects("100", nil)
 
-      assert category == Projects.get_category!(category.id)
-    end
+    assert [%{projects: []}] = cats_with_projects("2147483647", nil)
 
-    test "delete_category/1 deletes the category" do
-      category = category_fixture()
-      assert {:ok, %Category{}} = Projects.delete_category(category)
+    # check substring search constraint
+    assert [%{projects: [%{name: "Project"}]}] =
+             cats_with_projects(nil, "Descr")
 
-      assert_raise Ecto.NoResultsError, fn ->
-        Projects.get_category!(category.id)
-      end
-    end
+    assert [%{projects: [%{name: "Project"}]}] =
+             cats_with_projects(nil, "ipt")
 
-    test "change_category/1 returns a category changeset" do
-      category = category_fixture()
-      assert %Ecto.Changeset{} = Projects.change_category(category)
-    end
+    assert [%{projects: [%{name: "Project"}]}] =
+             cats_with_projects(nil, "cat")
+
+    assert [%{projects: []}] = cats_with_projects(nil, "neverMat4InG%$%")
   end
 end

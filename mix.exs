@@ -45,7 +45,8 @@ defmodule ElixirAwesome.MixProject do
       {:plug_cowboy, "~> 2.0"},
       {:earmark, "~> 1.4"},
       {:httpoison, "~> 1.6"},
-      {:html_sanitize_ex, "~> 1.3"}
+      {:html_sanitize_ex, "~> 1.3"},
+      {:bypass, "~> 1.0", only: :test}
     ]
   end
 
