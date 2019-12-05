@@ -61,6 +61,7 @@ defmodule ElixirAwesome.Projects do
   end
 
   def query, do: Ecto.Multi.new()
+  def run(query), do: Repo.transaction(query)
 
   def invalidate_all(query) do
     import Ecto.Multi, only: [update_all: 4]

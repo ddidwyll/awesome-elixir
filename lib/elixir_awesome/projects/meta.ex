@@ -1,7 +1,7 @@
 defmodule ElixirAwesome.Projects.Meta do
   @moduledoc false
 
-  import Logger, only: [debug: 1, warn: 1]
+  import Logger, only: [info: 1, warn: 1]
 
   defp is_github(project_url) do
     import String, only: [split: 2]
@@ -14,14 +14,16 @@ defmodule ElixirAwesome.Projects.Meta do
 
   defp github_api(repo, header) do
     alias ElixirAwesome.Projects.Helpers
-    import Helpers, only: [set_headers: 1]
-    import HTTPoison, only: [get: 3]
     alias HTTPoison.Response, as: R
     alias HTTPoison.Error, as: E
 
-    url = "https://api.github.com/repos" <> repo
+    import Application, only: [get_env: 2]
+    import Helpers, only: [set_headers: 1]
+    import HTTPoison, only: [get: 3]
 
-    debug("Try to get meta from #{url}")
+    url = get_env(:elixir_awesome, :github_api) <> repo
+
+    info("Try to get meta from #{url}")
 
     case get(url, set_headers(header),
            params: [page: 1, per_page: 1],
@@ -58,6 +60,7 @@ defmodule ElixirAwesome.Projects.Meta do
          reset <- get_header(headers, "X-RateLimit-Reset"),
          {unix, _} <- parse(reset || "") do
       now = system_time(:second)
+
       if unix > now do
         {:sleep, unix - now}
       else
@@ -126,19 +129,19 @@ defmodule ElixirAwesome.Projects.Meta do
            github_api(repo <> "/commits", header)
            |> parse_commits(p) do
       if st_updated || lc_updated do
-        debug("#{p.url}: meta updated")
+        info("#{p.url}: meta updated")
         iterate({projects, header}, [p | to_db], queue)
       else
-        debug("#{p.url}: meta not modified")
+        info("#{p.url}: meta not modified")
         iterate({projects, header}, to_db, queue)
       end
     else
       {:shedule, error} ->
-        debug("#{p.url}: #{error} (try again later)")
+        warn("#{p.url}: #{error} (try again later)")
         iterate({projects, header}, to_db, [project | queue])
 
       {:skip, error} ->
-        warn("#{p.url}: #{error} (project skiped)")
+        warn("#{p.url}: #{error} (project skipped)")
         iterate({projects, header}, to_db, queue)
 
       {:delete, error} ->
@@ -147,13 +150,9 @@ defmodule ElixirAwesome.Projects.Meta do
         iterate({projects, header}, [del | to_db], queue)
 
       {:sleep, wait} ->
-        debug("Rate limit, need wait #{wait} seconds")
+        warn("Rate limit, need wait #{wait} seconds")
         new_queue = [project | projects] ++ queue
         {{:sleep, wait}, to_db, new_queue}
-
-      _ ->
-        warn("#{p.url}: wrong project struct")
-        iterate({projects, header}, to_db, queue)
     end
   end
 

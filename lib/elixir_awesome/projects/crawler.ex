@@ -3,11 +3,10 @@ defmodule ElixirAwesome.Projects.Crawler do
 
   use GenServer
 
-  alias ElixirAwesome.Repo
   alias ElixirAwesome.Projects
-  alias ElixirAwesome.Projects.Meta
-  alias ElixirAwesome.Projects.Fetch
-  alias ElixirAwesome.Projects.Helpers
+  alias Projects.Meta
+  alias Projects.Fetch
+  alias Projects.Helpers
 
   @day_sec 86400
   @fetch_replace [
@@ -30,6 +29,8 @@ defmodule ElixirAwesome.Projects.Crawler do
 
   @impl true
   def init(_) do
+    import Application, only: [get_env: 2]
+
     state = %{
       projects_queue: [],
       fetch_delay: 1,
@@ -37,7 +38,9 @@ defmodule ElixirAwesome.Projects.Crawler do
       meta_job: nil
     }
 
-    cast(:fetch, 30)
+    if get_env(:elixir_awesome, :autostart),
+      do: cast(:fetch)
+
     {:ok, state}
   end
 
@@ -79,7 +82,6 @@ defmodule ElixirAwesome.Projects.Crawler do
     import Process, only: [cancel_timer: 1]
     import Meta
     import Projects
-    import Repo
 
     if state.meta_job, do: cancel_timer(state.meta_job)
 
@@ -89,7 +91,7 @@ defmodule ElixirAwesome.Projects.Crawler do
     if length(to_db) > 0 do
       query()
       |> upsert_projects(to_db)
-      |> transaction()
+      |> run()
     end
 
     {sleep, delay} =
@@ -116,7 +118,6 @@ defmodule ElixirAwesome.Projects.Crawler do
   def handle_info(:fetch, state) do
     import Fetch
     import Projects
-    import Repo
 
     with {_, header} <- last_update(:fetch) || {nil, nil},
          {:ok, cats, projects, etag} <- fetch(header),
@@ -125,7 +126,7 @@ defmodule ElixirAwesome.Projects.Crawler do
            |> invalidate_all()
            |> upsert_categories(cats)
            |> upsert_projects(projects, @fetch_replace)
-           |> transaction() do
+           |> run() do
       updated({projects, etag})
       cast(:fetch, @day_sec)
       cast(:meta)

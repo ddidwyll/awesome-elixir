@@ -5,33 +5,33 @@ defmodule ElixirAwesome.Projects.Fetch do
   and shot description
   """
 
-  import Logger, only: [debug: 1, warn: 1]
-  import HtmlSanitizeEx, only: [strip_tags: 1]
+  import Logger, only: [info: 1, warn: 1]
 
   defp fetch_list(header) do
     import ElixirAwesome.Projects.Helpers
     import Application, only: [get_env: 2]
     import HTTPoison, only: [get: 2]
+
     alias HTTPoison.Response, as: R
     alias HTTPoison.Error, as: E
 
     source_url = get_env(:elixir_awesome, :parse_url)
 
-    debug("Try to fetch source from #{source_url}")
+    info("Try to fetch source from #{source_url}")
 
     case get(source_url, set_headers(header)) do
       {:ok, %R{status_code: 304}} ->
-        debug("Source file not modified, skip")
+        info("Source file not modified, skip")
         :skip
 
       {:ok, %R{status_code: 200, body: body, headers: headers}} ->
         etag = get_header(headers, "ETag")
-        debug("Source file fetched successful")
+        info("Source file fetched successful")
         {:ok, body, etag}
 
       {:ok, %R{status_code: 404}} ->
-        warn("Source file not exist, check url")
-        {:error, "Not found"}
+        warn("Source file not found, check url")
+        {:error, "Source file not found"}
 
       {:error, %E{reason: reason}} ->
         warn("Fetch error, #{reason}")
@@ -49,7 +49,7 @@ defmodule ElixirAwesome.Projects.Fetch do
     with true <- is_binary(file),
          lines <- split(file, ~r{\r\n?|\n}),
          true <- length(lines) > 1 do
-      debug("Source file checked successful")
+      info("Source file checked successful")
       {:ok, lines}
     else
       _ ->
@@ -66,7 +66,7 @@ defmodule ElixirAwesome.Projects.Fetch do
     content = drop(blocks, 5)
 
     if length(content) > 1 do
-      debug("Source file checked successful")
+      info("Source file checked successful")
       {:ok, content}
     else
       warn("Source file too short")
@@ -75,48 +75,57 @@ defmodule ElixirAwesome.Projects.Fetch do
   end
 
   defp to_html(md) do
-    import Earmark, only: [as_html: 1]
+    import String, only: [trim: 1]
+    import Earmark, only: [as_html!: 1]
     import HtmlSanitizeEx, only: [markdown_html: 1]
 
-    case as_html(md) do
-      {:ok, html, _} -> markdown_html(html)
-      _ -> warn("Wrong markdown format: #{md}") && ""
-    end
+    as_html!(md)
+    |> trim()
+    |> markdown_html()
+  end
+
+  defp strip_html(string) do
+    import String, only: [trim: 1]
+    import HtmlSanitizeEx, only: [strip_tags: 1]
+
+    string
+    |> trim()
+    |> strip_tags()
   end
 
   defp parse_project(cat, line) do
     import String, only: [split: 3]
     import Regex, only: [run: 2]
 
-    [left, right] = split(line, " - ", parts: 2)
-    [_, name, url] = run(~r/\[(.+)\]\((.+)\)/, left)
-
-    %{
-      url: url,
-      name: strip_tags(name),
-      description: to_html(right),
-      category_name: cat.name,
-      exist: true
-    }
-  end
-
-  defp parse_blocks([]) do
-    debug("Not enough blocks")
-    {:error, "Blocks empty"}
+    with true <- is_map(cat),
+         [left, right] <- split(line, " - ", parts: 2),
+         [_, name, url] <- run(~r/\[(.+)\]\((.+)\)/, left) do
+      %{
+        url: url,
+        name: strip_html(name),
+        description: to_html(right),
+        category_name: cat.name,
+        exist: true
+      }
+    else
+      _ -> nil
+    end
   end
 
   defp parse_blocks(blocks) do
-    debug("Start parsing blocks")
+    info("Start parsing blocks")
     parse_blocks(blocks, [], [])
   end
 
   defp parse_blocks([], cats, projects) do
-    debug("End of blocks, parsed successful")
+    info("End of blocks, parsed successful")
     {:ok, cats, projects}
   end
 
   defp parse_blocks([block | blocks], cats, projects) do
     import List, only: [first: 1]
+    import Enum, only: [filter: 2]
+
     alias Earmark.Block.Heading, as: H
     alias Earmark.Block.Para, as: P
     alias Earmark.Block.List, as: L
@@ -125,7 +134,7 @@ defmodule ElixirAwesome.Projects.Fetch do
     case block do
       %H{level: 2, content: name} ->
         cat = %{
-          name: strip_tags(name),
+          name: strip_html(name),
           description: nil,
           exist: true
         }
@@ -133,25 +142,30 @@ defmodule ElixirAwesome.Projects.Fetch do
         parse_blocks(blocks, [cat | cats], projects)
 
       %P{lines: [line | _]} ->
-        [last_cat | cats_tail] = cats
-        cat = %{last_cat | description: to_html(line)}
-        parse_blocks(blocks, [cat | cats_tail], projects)
+        if cats == [] do
+          warn("Source file has wrong struc")
+          {:error, "Wrong source file struct"}
+        else
+          [last_cat | cats_tail] = cats
+          cat = %{last_cat | description: to_html(line)}
+          parse_blocks(blocks, [cat | cats_tail], projects)
+        end
 
       %L{blocks: list} ->
-        current_projects =
+        parsed_projects =
           for list_item <- list do
             %I{
               blocks: [%P{lines: [line | _]} | _]
             } = list_item
 
-            (first(cats) || %{name: "N\A"})
-            |> parse_project(line)
+            parse_project(first(cats), line)
           end
+          |> filter(& &1)
 
-        parse_blocks(blocks, cats, current_projects ++ projects)
+        parse_blocks(blocks, cats, parsed_projects ++ projects)
 
       %H{level: 1} ->
-        debug("End of blocks, parsed successful")
+        info("End of blocks, parsed successful")
         {:ok, cats, projects}
 
       unexpected_block ->

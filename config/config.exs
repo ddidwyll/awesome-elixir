@@ -11,8 +11,10 @@ config :elixir_awesome,
   ecto_repos: [ElixirAwesome.Repo]
 
 config :elixir_awesome,
+  autostart: false,
   parse_url:
     "https://raw.githubusercontent.com/h4cc/awesome-elixir/master/README.md",
+  github_api: "https://api.github.com/repos",
   github_login: System.get_env("GITHUB_LOGIN"),
   github_pass: System.get_env("GITHUB_PASS"),
   mod_times_file: "priv/mod_times"

@@ -22,7 +22,6 @@ defmodule ElixirAwesomeWeb do
       use Phoenix.Controller, namespace: ElixirAwesomeWeb
 
       import Plug.Conn
-      import ElixirAwesomeWeb.Gettext
       alias ElixirAwesomeWeb.Router.Helpers, as: Routes
     end
   end
@@ -40,8 +39,6 @@ defmodule ElixirAwesomeWeb do
       # Use all HTML functionality (forms, tags, etc)
       use Phoenix.HTML
 
-      import ElixirAwesomeWeb.ErrorHelpers
-      import ElixirAwesomeWeb.Gettext
       alias ElixirAwesomeWeb.Router.Helpers, as: Routes
     end
   end
@@ -51,13 +48,6 @@ defmodule ElixirAwesomeWeb do
       use Phoenix.Router
       import Plug.Conn
       import Phoenix.Controller
-    end
-  end
-
-  def channel do
-    quote do
-      use Phoenix.Channel
-      import ElixirAwesomeWeb.Gettext
     end
   end
 
